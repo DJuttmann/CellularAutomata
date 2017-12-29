@@ -30,6 +30,8 @@ namespace CellularAutomata
     private int CAWidth = 600;
     private int CAHeight = 400;
 
+
+    // Constructor
     public Form1 ()
     {
       InitializeComponent ();
@@ -41,16 +43,7 @@ namespace CellularAutomata
       this.Top = 0;
       this.Left = 0;
 
-      Rules.CreateLookup (ref lookup, ref decayLookup, Rules.StarWars, 4);
-      A = new Automaton (CAWidth, CAHeight, 4, lookup, decayLookup);
-//      A = new Automaton (CAWidth, CAHeight, 4, Rules.StarWars);
-      var C = new Palette ();
-      C.AddColour (0, 0, 0);
-      C.AddColour (0, 255, 255);
-      C.AddColour (0, 128, 255);
-      C.AddColour (0, 0, 255);
-      A.ColourPalette = C;
-      A.Randomize ();
+      SetupAutomaton ();
 
       AutomatonImage = new Bitmap (CAWidth, CAHeight, PixelFormat.Format24bppRgb);
       AutomatonRectangle = new Rectangle (0, 0, CAWidth, CAHeight);
@@ -70,6 +63,23 @@ namespace CellularAutomata
     }
 
 
+    private void SetupAutomaton ()
+    {
+      List <int> birth = new List <int> (new [] {2});
+      List <int> death = new List <int> (new [] {3, 4, 5});
+      int stateCount = 4;
+
+      Rules.SetDecayRule (birth, death, stateCount);
+      Rules.CreateLookup (ref lookup, ref decayLookup, Rules.Decay);
+      Palette palette = Rules.CreatePalette ();
+
+      A = new Automaton (CAWidth, CAHeight, lookup, decayLookup);
+      A.ColourPalette = palette;
+      A.Randomize ();
+    }
+
+
+    // Update and render CA to screen.
     private void UpdateAutomaton (object sender, EventArgs e)
     {
 //      A.NextGeneration ();
@@ -78,6 +88,7 @@ namespace CellularAutomata
     }
 
 
+    // Paint method for CA.
     public void DisplayAutomaton (object sender, System.Windows.Forms.PaintEventArgs e)
     {
       A.Render ();
@@ -92,8 +103,51 @@ namespace CellularAutomata
         System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
       e.Graphics.DrawImage (AutomatonImage, 0, 0, CAWidth * 2, CAHeight * 2);
 //      AutomatonImage.Save ("testfile.bmp", ImageFormat.Bmp);
-      Console.WriteLine ("Test");
+//      Console.WriteLine ("Test");
     }
 
+
+    // Display the settings window.
+    private void ShowSettings ()
+    {
+      FormSettings settings = new FormSettings ();
+      if (settings.ShowDialog () == DialogResult.OK)
+      {
+        Rules.CreateLookup (ref lookup, ref decayLookup, Rules.Decay);
+        Palette palette = Rules.CreatePalette ();
+        A.SetRule (lookup, decayLookup);
+        A.ColourPalette = palette;
+      }
+    }
+
+
+    // Key press handler.
+    private void Form1_KeyDown (object sender, KeyEventArgs e)
+    {
+      switch (e.KeyCode)
+      {
+      case Keys.Escape:
+        ShowSettings ();
+        break;
+      case Keys.Enter:
+        if (UpdateTimer.Enabled)
+          UpdateTimer.Stop ();
+        else
+          UpdateTimer.Start ();
+        break;
+      case Keys.Space:
+        if (UpdateTimer.Enabled)
+          UpdateTimer.Stop ();
+        else
+          UpdateAutomaton (null, null);
+        break;
+      case Keys.F5:
+        A.Randomize ();
+        Picture.Invalidate ();
+        break;
+      default:
+        break;
+      }
+    }
   }
 }

@@ -36,7 +36,8 @@
       this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
       this.ClientSize = new System.Drawing.Size(282, 253);
       this.Name = "Form1";
-      this.Text = "Form1";
+      this.Text = "Cellular Automata - Press [Esc] for settings";
+      this.KeyDown += new System.Windows.Forms.KeyEventHandler(this.Form1_KeyDown);
       this.ResumeLayout(false);
 
     }

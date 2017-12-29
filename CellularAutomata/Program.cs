@@ -2,6 +2,7 @@
 // Reference
 // https://msdn.microsoft.com/en-us/library/5ey6h79d(v=vs.110).aspx
 // http://net-informations.com/q/faq/imgtobyte.html
+// https://blogs.msdn.microsoft.com/shawnhar/2010/12/06/when-winforms-met-game-loop/
 //========================================================================================
 
 using System;
@@ -140,18 +141,30 @@ namespace CellularAutomata
 
 
     // Constructor based on rule Lookup Table.
-    public Automaton (int width, int height, int stateCount,
+    public Automaton (int width, int height,
                       ByteLookup [] lookup, byte [] decayLookup)
     {
       this.Width = width;
       this.Height = height;
-      StateCount = stateCount;
-      LookupTable = lookup;
-      DecayLookup = decayLookup;
       Cells = new byte [this.height, this.width];
       CellsCopy = new byte [this.height, this.width];
       ImageData = new byte [this.Width * this.Height * 3];
+      SetRule (lookup, decayLookup);
       Generation = 0;
+    }
+
+
+    // Set the rule of the CA based on lookup tables.
+    public void SetRule (ByteLookup [] lookup, byte [] decayLookup)
+    {
+      StateCount = decayLookup.Length;
+      LookupTable = lookup;
+      DecayLookup = decayLookup;
+
+      for (int i = 0; i < height; i++)
+        for (int j = 0; j < width; j++)
+          if (Cells [i, j] >= StateCount)
+            Cells [i, j] = 0;
     }
 
 
@@ -171,14 +184,14 @@ namespace CellularAutomata
       for (int j = 0; j < 1; j++)
         for (int i = 1; i < iMax; i++)
         {
-          CellsCopy [i, 0] = CellsCopy [i, Width + j];
-          CellsCopy [i, width - 1 - j] = CellsCopy [i, 1 - j];
+          Cells [i, 0] = Cells [i, Width + j];
+          Cells [i, width - 1 - j] = Cells [i, 1 - j];
         }
       for (int i = 0; i < 1; i++)
         for (int j = 0; j < width; j++)
         {
-          CellsCopy [0, j] = CellsCopy [Height + i, j];
-          CellsCopy [height - 1 - i, j] = CellsCopy [1 - i, j];
+          Cells [0, j] = Cells [Height + i, j];
+          Cells [height - 1 - i, j] = Cells [1 - i, j];
         }
     }
 
@@ -186,13 +199,15 @@ namespace CellularAutomata
     // Generate the next generation of the CA.
     public void NextGeneration ()
     {
-      Generation++;
       int iMax = Height + 1;
       int jMax = Width + 1;
+      Generation++;
+      CopyBorders ();
+
       for (int i = 1; i < iMax; i++)
         for (int j = 1; j < jMax; j++)
           CellsCopy [i, j] = Rule (this, i, j);
-      CopyBorders ();
+
       var temp = Cells;
       Cells = CellsCopy;
       CellsCopy = temp;
@@ -218,10 +233,12 @@ namespace CellularAutomata
     // Generate the next generation four pixels at a time using lookup tables.
     public void FastGeneration ()
     {
-      Generation++;
       int iMax = Height + 1;
       int jMax = Width + 1;
       int pixels;
+      Generation++;
+      CopyBorders ();
+
       for (int i = 1; i < iMax; i += 2)
       {
         pixels = 0;
@@ -241,14 +258,13 @@ namespace CellularAutomata
             CellsCopy [i + 1, j] = LookupTable [pixels].Byte2;
           else
             CellsCopy [i + 1, j] = DecayLookup [Cells [i + 1, j]];
-          if (Cells [i, j + 1] < 2)
+          if (Cells [i + 1, j + 1] < 2)
             CellsCopy [i + 1, j + 1] = LookupTable [pixels].Byte3;
           else
             CellsCopy [i + 1, j + 1] = DecayLookup [Cells [i + 1, j + 1]];
         }
       }
 
-      CopyBorders ();
       var temp = Cells;
       Cells = CellsCopy;
       CellsCopy = temp;
@@ -287,19 +303,59 @@ namespace CellularAutomata
   class Rules
   {
     public const int LookupCount = 1 << 16;
-    public const byte Alive = 1;
     public const byte Dead = 0;
+    public const byte Alive = 1;
+    public const byte DecayStart = 2;
+
+    private static bool [] DecayBirth = new bool [9];
+    private static bool [] DecayDeath = new bool [9];
+    private static int StateCount = 4;
 
 
+    // Set the parameters for the decay rule set.
+    public static void SetDecayRule (List <int> birth, List <int> death, int stateCount)
+    {
+      for (int i = 0; i < 9; i++)
+      {
+        DecayBirth [i] = false;
+        DecayDeath [i] = false;
+      }
+      for (int i = 0; i < birth.Count; i++)
+        if (birth [i] >= 0 && birth [i] < 9)
+          DecayBirth [birth [i]] = true;
+      for (int i = 0; i < death.Count; i++)
+        if (death [i] >= 0 && death [i] < 9)
+          DecayDeath [death [i]] = true;
+      if (stateCount >= 2 && stateCount <= 256)
+      StateCount = stateCount;
+    }
+
+
+    // Get the saved rules.
+    public static void GetDecayRules (ref bool [] birth, ref bool [] death, 
+                                      ref int stateCount)
+    {
+      birth = new bool [9];
+      death = new bool [9];
+      for (int i = 0; i < 9; i++)
+      {
+        birth [i] = DecayBirth [i];
+        death [i] = DecayDeath [i];
+      }
+      stateCount = StateCount;
+    }
+
+
+    // Get the bit from an integer at given index.
     private static byte GetBit (int value, int index)
     {
       return (value & (1 << index)) > 0 ? Alive : Dead;
     }
 
 
+    // Create lookup table based on a rule function
     public static void CreateLookup (ref ByteLookup [] lookup, ref byte [] decayLookup,
-                                     Func <Automaton, int, int, byte> Rule,
-                                     int statecount)
+                                     Func <Automaton, int, int, byte> Rule)
     {
       lookup = new ByteLookup [LookupCount];
       Automaton A = new Automaton (4, 4, 256, Rule);
@@ -307,21 +363,36 @@ namespace CellularAutomata
       {
         for (int col = 0; col < 4; col++)
           for (int row = 0; row < 4; row++)
-            A [row, col] = GetBit (n, 4 * col + row);
+            A [row + 1, col + 1] = GetBit (n, 4 * col + row);
         A.NextGeneration ();
-        lookup [n].Byte0 = A [1, 1];
-        lookup [n].Byte1 = A [1, 2];
-        lookup [n].Byte2 = A [2, 1];
-        lookup [n].Byte3 = A [2, 2];
+        lookup [n].Byte0 = A [2, 2];
+        lookup [n].Byte1 = A [2, 3];
+        lookup [n].Byte2 = A [3, 2];
+        lookup [n].Byte3 = A [3, 3];
       }
 
-      decayLookup = new byte [statecount];
-      for (int n = 2; n < statecount; n++)
-        decayLookup [n] = n + 1 < statecount ? Convert.ToByte (n + 1) : Dead;
+      decayLookup = new byte [StateCount];
+      for (int n = 2; n < StateCount; n++)
+        decayLookup [n] = n + 1 < StateCount ? Convert.ToByte (n + 1) : Dead;
     }
 
 
+    // Create palette based on current decay rules.
+    public static Palette CreatePalette ()
+    {
+      Palette palette = new Palette ();
+      palette.AddColour (0, 0, 0);
+      palette.AddColour (0, 255, 255);
+      for (int n = 2; n < StateCount; n++)
+      {
+        palette.AddColour (0, Convert.ToByte (128 * (StateCount - n - 1) /
+                                              (StateCount - 3)), 255);
+      }
+      return palette;
+    }
 
+
+    // Returns number of live cells in 3x3 neighborhood of cell.
     public static int CountNeighbours (Automaton A, int row, int col, byte value)
     {
       int total = 0;
@@ -333,6 +404,7 @@ namespace CellularAutomata
     }
 
 
+    // Star wars = Decay 2/345/4
     public static byte StarWars (Automaton A, int row, int col)
     {
       switch (A [row, col])
@@ -352,6 +424,28 @@ namespace CellularAutomata
         return 0;
       }
       return 1;
+    }
+
+
+    // General decay rule.
+    public static byte Decay (Automaton A, int row, int col)
+    {
+      switch (A [row, col])
+      {
+      case Dead:
+        if (DecayBirth [CountNeighbours (A, row, col, Alive)])
+          return Alive;
+        return Dead;
+      case Alive:
+        if (DecayDeath [CountNeighbours (A, row, col, Alive) - 1])
+          return Alive;
+        return StateCount > 2 ? DecayStart : Dead;
+      default:
+        int temp = A [row, col] + 1;
+        if (temp >= StateCount)
+          return Dead;
+        return Convert.ToByte (temp);
+      }
     }
   }
 
