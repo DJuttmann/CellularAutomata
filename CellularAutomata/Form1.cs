@@ -37,7 +37,7 @@ namespace CellularAutomata
       InitializeComponent ();
       this.FormBorderStyle = FormBorderStyle.FixedDialog;
       this.MaximizeBox = false;
-      this.MinimizeBox = false;
+      this.MinimizeBox = true;
       this.Width = this.Width - this.ClientSize.Width + 2 * CAWidth;
       this.Height = this.Height - this.ClientSize.Height + 2 * CAHeight;
       this.Top = 0;
@@ -107,17 +107,13 @@ namespace CellularAutomata
     }
 
 
-    // Display the settings window.
-    private void ShowSettings ()
+    // Set rule for CA based on active rule.
+    public void SetRule ()
     {
-      FormSettings settings = new FormSettings ();
-      if (settings.ShowDialog () == DialogResult.OK)
-      {
-        Rules.CreateLookup (ref lookup, ref decayLookup, Rules.Decay);
-        Palette palette = Rules.CreatePalette ();
-        A.SetRule (lookup, decayLookup);
-        A.ColourPalette = palette;
-      }
+      Rules.CreateLookup (ref lookup, ref decayLookup, Rules.ActiveRule);
+      Palette palette = Rules.CreatePalette ();
+      A.SetRule (lookup, decayLookup);
+      A.ColourPalette = palette;
     }
 
 
@@ -127,7 +123,9 @@ namespace CellularAutomata
       switch (e.KeyCode)
       {
       case Keys.Escape:
-        ShowSettings ();
+        FormSettings settings = new FormSettings ();
+        settings.Show (this);
+//        ShowSettings ();
         break;
       case Keys.Enter:
         if (UpdateTimer.Enabled)

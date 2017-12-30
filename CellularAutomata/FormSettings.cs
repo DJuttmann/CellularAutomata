@@ -31,39 +31,39 @@ namespace CellularAutomata
         {
           Text = i.ToString (),
           Top = 15,
-          Left = 100 + 30 * i,
+          Left = 70 + 30 * i,
           Width = 20
         };
-        Controls.Add (NumberLabels [i]);
+        groupBoxBasic.Controls.Add (NumberLabels [i]);
 
         BirthChecks [i] = new CheckBox ()
         {
           Checked = birth [i],
           Top = 38,
-          Left = 100 + 30 * i,
+          Left = 70 + 30 * i,
           Width = 20
         };
-        Controls.Add (BirthChecks [i]);
+        groupBoxBasic.Controls.Add (BirthChecks [i]);
 
         SurvivalChecks [i] = new CheckBox ()
         {
           Checked = survival [i],
           Top = 70,
-          Left = 100 + 30 * i,
+          Left = 70 + 30 * i,
           Width = 20
         };
-        Controls.Add (SurvivalChecks [i]);
+        groupBoxBasic.Controls.Add (SurvivalChecks [i]);
       }
 
-      textBoxStateCount.Text = stateCount.ToString ();
+      numericBasicStateCount.Value = stateCount;
     }
 
 
-    private void buttonOK_Click (object sender, EventArgs e)
+    private void buttonSetBasic_Click (object sender, EventArgs e)
     {
       List <int> birth = new List <int> ();
       List <int> survival = new List <int> ();
-      int stateCount = Convert.ToInt32 (textBoxStateCount.Text);
+      int stateCount = Convert.ToInt32 (numericBasicStateCount.Value);
       if (stateCount > 256)
         stateCount = 256;
       if (stateCount < 0)
@@ -78,15 +78,14 @@ namespace CellularAutomata
       }
 
       Rules.SetDecayRule (birth, survival, stateCount);
-      DialogResult = DialogResult.OK;
-      Dispose ();
+      ((Form1) Owner).SetRule ();
     }
 
 
-    private void buttonCancel_Click (object sender, EventArgs e)
+    private void buttonSetAdvanced_Click (object sender, EventArgs e)
     {
-      DialogResult = DialogResult.Cancel;
-      Dispose ();
+      if (Rules.SetAdvancedRule (textBoxRule.Text))
+        ((Form1) Owner).SetRule ();
     }
   }
 }

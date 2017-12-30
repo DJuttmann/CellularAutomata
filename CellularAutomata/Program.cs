@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Text;
 
 
 namespace CellularAutomata
@@ -308,9 +309,13 @@ namespace CellularAutomata
     public const byte DecayStart = 2;
 
     private static bool [] DecayBirth = new bool [9];
-    private static bool [] DecayDeath = new bool [9];
+    private static bool [] DecaySurvival = new bool [9];
     private static int StateCount = 4;
 
+    private static bool [,] AdvancedBirth = new bool [5, 5];
+    private static bool [,] AdvancedSurvival = new bool [5, 5];
+
+    public static Func <Automaton, int, int, byte> ActiveRule = Decay;
 
     // Set the parameters for the decay rule set.
     public static void SetDecayRule (List <int> birth, List <int> death, int stateCount)
@@ -318,20 +323,21 @@ namespace CellularAutomata
       for (int i = 0; i < 9; i++)
       {
         DecayBirth [i] = false;
-        DecayDeath [i] = false;
+        DecaySurvival [i] = false;
       }
       for (int i = 0; i < birth.Count; i++)
         if (birth [i] >= 0 && birth [i] < 9)
           DecayBirth [birth [i]] = true;
       for (int i = 0; i < death.Count; i++)
         if (death [i] >= 0 && death [i] < 9)
-          DecayDeath [death [i]] = true;
+          DecaySurvival [death [i]] = true;
       if (stateCount >= 2 && stateCount <= 256)
       StateCount = stateCount;
+      ActiveRule = Decay;
     }
 
 
-    // Get the saved rules.
+    // Get the saved decay rules.
     public static void GetDecayRules (ref bool [] birth, ref bool [] death, 
                                       ref int stateCount)
     {
@@ -340,9 +346,62 @@ namespace CellularAutomata
       for (int i = 0; i < 9; i++)
       {
         birth [i] = DecayBirth [i];
-        death [i] = DecayDeath [i];
+        death [i] = DecaySurvival [i];
       }
       stateCount = StateCount;
+    }
+
+
+    public static bool SetAdvancedRule (string rule)
+    {
+      RuleParsing.RemoveSpaces (ref rule);
+      if (!RuleParsing.ValidateRule (rule))
+        return false;
+      string birth = null, 
+             survival = null;
+      int stateCount = 0;
+      if (!RuleParsing.SplitRule (rule, ref birth, ref survival, ref stateCount))
+        return false;
+
+      // Clear the Advanced rule table.
+      for (int i = 0; i < 5; i++)
+        for (int j = 0; j < 5; j++)
+        {
+          AdvancedBirth [i, j] = false;
+          AdvancedSurvival [i, j] = false;
+        }
+
+      // Load the tables.
+      List <int> HVCount = null;
+      for (int i = 0; i < birth.Length;)
+      {
+        int NeighbourCount = RuleParsing.GetDigit (birth, ref i, ref HVCount);
+        if (NeighbourCount == -1)
+          return false;
+        for (int j = 0; j < HVCount.Count; j++)
+          AdvancedBirth [HVCount [j],
+                         NeighbourCount - HVCount [j]] = true;
+      }
+      for (int i = 0; i < survival.Length;)
+      {
+        int NeighbourCount = RuleParsing.GetDigit (survival, ref i, ref HVCount);
+        if (NeighbourCount == -1)
+          return false;
+        for (int j = 0; j < HVCount.Count; j++)
+          AdvancedSurvival [HVCount [j],
+                            NeighbourCount - HVCount [j]] = true;
+      }
+
+      StateCount = stateCount;
+      ActiveRule = AdvancedDecay;
+      return true;
+    }
+
+
+    // [wip]
+    public static string GetAdvancedRules ()
+    {
+      return "";
     }
 
 
@@ -383,11 +442,12 @@ namespace CellularAutomata
       Palette palette = new Palette ();
       palette.AddColour (0, 0, 0);
       palette.AddColour (0, 255, 255);
-      for (int n = 2; n < StateCount; n++)
-      {
-        palette.AddColour (0, Convert.ToByte (128 * (StateCount - n - 1) /
-                                              (StateCount - 3)), 255);
-      }
+      if (StateCount == 3)
+        palette.AddColour (0, 0, 255);
+      else
+        for (int n = 2; n < StateCount; n++)
+          palette.AddColour (0, Convert.ToByte (128 * (StateCount - n - 1) /
+                                                (StateCount - 3)), 255);
       return palette;
     }
 
@@ -401,6 +461,23 @@ namespace CellularAutomata
           if (A [row + i, col + j] == value)
             total++;
       return total;
+    }
+
+
+    public static void CountNeighbours (Automaton A, int row, int col, byte value,
+                                        out int direct, out int diagonal)
+    {
+      direct = 0;
+      diagonal = 0;
+      for (int i = -1; i < 2; i++)
+        for (int j = -1; j < 2; j++)
+          if (A [row + i, col + j] == value && (i != 0 || j != 0))
+          {
+            if (i * j == 0)
+              direct++;
+            else
+              diagonal++;
+          }
     }
 
 
@@ -437,7 +514,32 @@ namespace CellularAutomata
           return Alive;
         return Dead;
       case Alive:
-        if (DecayDeath [CountNeighbours (A, row, col, Alive) - 1])
+        if (DecaySurvival [CountNeighbours (A, row, col, Alive) - 1])
+          return Alive;
+        return StateCount > 2 ? DecayStart : Dead;
+      default:
+        int temp = A [row, col] + 1;
+        if (temp >= StateCount)
+          return Dead;
+        return Convert.ToByte (temp);
+      }
+    }
+
+
+    // Advanced decay rule.
+    public static byte AdvancedDecay (Automaton A, int row, int col)
+    {
+      int direct, diagonal;
+      switch (A [row, col])
+      {
+      case Dead:
+        CountNeighbours (A, row, col, Alive, out direct, out diagonal);
+        if (AdvancedBirth [direct, diagonal])
+          return Alive;
+        return Dead;
+      case Alive:
+        CountNeighbours (A, row, col, Alive, out direct, out diagonal);
+        if (AdvancedSurvival [direct, diagonal])
           return Alive;
         return StateCount > 2 ? DecayStart : Dead;
       default:
